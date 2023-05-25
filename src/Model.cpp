@@ -3,25 +3,18 @@
 #include <random>
 #include <iostream>
 
-uint32_t mostLikely(const std::vector<float>& logits) {
-    uint32_t result = 0;
+
+std::vector<float> softmax(const std::vector<float>& logits, float temperature = 1.0f) {
+    std::vector<float> result(logits.size());
+    float sum = 0;
     for (size_t i = 0; i < logits.size(); ++i) {
-        if (logits[i] > logits[result]) {
-            result = i;
-        }
+        result[i] = exp(logits[i] / temperature);
+        sum += result[i];
+    }
+    for (size_t i = 0; i < result.size(); ++i) {
+        result[i] /= sum;
     }
     return result;
-}
-
-void softmax(std::vector<float>& logits, float temperature = 1.0f) {
-    float sum = 0;
-    for (auto& logit : logits) {
-        logit = exp(logit / temperature);
-        sum += logit;
-    }
-    for (auto& logit : logits) {
-        logit /= sum;
-    }
 }
 
 template<typename T>
@@ -53,32 +46,38 @@ Model::Model(Tokenizer *tokenizer, rwkv_context *context) : tokenizer(tokenizer)
     logits.resize(rwkv_get_logits_buffer_element_count(context));
 }
 
-void Model::encodeText(const std::string& text) {
-    tokens = tokenizer->encode(text);
+void Model::add(uint32_t token) {
+    tokens.push_back(token);
+    rwkv_eval(context, token, &state[0], &state[0], &logits[0]);
+}
+
+void Model::add(const std::string& s) {
+    if (s.empty())  return;
+
+    auto ltokens = tokenizer->encode(s);
+    for (auto token : ltokens) {
+        tokens.push_back(token);
+    }
 
     auto start = time(NULL);
     std::cout << "Encoding text" << std::endl;
-    for (size_t i = 0; i < tokens.size() - 1; ++i) {
+    for (size_t i = 0; i < ltokens.size(); ++i) {
         if (i == 0) {
-            rwkv_eval(context, tokens[i], NULL, &state[0], &logits[0]);
+            rwkv_eval(context, ltokens[i], NULL, &state[0], &logits[0]);
         } else {
-            rwkv_eval(context, tokens[i], &state[0], &state[0], &logits[0]);
+            rwkv_eval(context, ltokens[i], &state[0], &state[0], &logits[0]);
         }
         if (time(NULL) - start == 1) {
             auto end = time(NULL);
-            std::cout << i << " / " << tokens.size() << std::endl;
+            std::cout << i << " / " << ltokens.size() << std::endl;
             start = end;
         }
     }
-    nextToken = tokens.back();
-
     std::cout << "Text encoded\n";
 }
 
-std::string Model::next() {
-    rwkv_eval(context, nextToken, &state[0], &state[0], &logits[0]);
-
-    softmax(logits, samplingParams.temperature);
+uint32_t Model::sampleDistribution() {
+    auto probs = softmax(logits, samplingParams.temperature);
 
     // punish repeating
     int count = std::min((int)tokens.size(), 30);
@@ -101,9 +100,9 @@ std::string Model::next() {
     std::mt19937 gen(rd());
     std::discrete_distribution<> d(logits.begin(), logits.end());
 
-    nextToken = d(gen);
+    return d(gen);
+}
 
-    tokens.push_back(nextToken);
-
-    return tokenizer->decode({nextToken});
+std::string Model::decodeToken(uint32_t token) {
+    return tokenizer->decode({token});
 }

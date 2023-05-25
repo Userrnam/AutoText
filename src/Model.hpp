@@ -20,13 +20,14 @@ struct Model {
     std::vector<float> state;
     std::vector<float> logits;
     std::vector<uint32_t> tokens;
-    uint32_t nextToken;
 
     Model(const std::string& tokenizerPath, const std::string& modelPath);
     Model(Tokenizer *tokenizer, rwkv_context *context);
 
     operator bool() { return context != nullptr && tokenizer->ok(); }
 
-    void encodeText(const std::string& text);
-    std::string next();
+    void add(uint32_t token);
+    void add(const std::string& s);
+    uint32_t sampleDistribution();
+    std::string decodeToken(uint32_t token);
 };

@@ -9,4 +9,5 @@ execute_process(COMMAND cargo build
 
 add_library(tokenizer tokenizer.cpp tokenizer.hpp)
 target_link_directories(tokenizer PUBLIC target/debug)
+target_include_directories(tokenizer PUBLIC .)
 target_link_libraries(tokenizer PUBLIC c_tokenizer)

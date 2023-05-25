@@ -4,6 +4,7 @@
 #include <iostream>
 
 #include "Model.hpp"
+#include "Application.hpp"
 
 template<typename T>
 std::ostream& operator<<(std::ostream& os, const std::vector<T>& v) {
@@ -30,15 +31,21 @@ std::string read_file(const std::string& path) {
 }
 
 int main() {
-    std::string path = "/Users/antonkondratuk/LM/rwkv.cpp/";
-    Model model(
-        path + "rwkv/20B_tokenizer.json",
-        path + "Q8_0-RWKV-4-Raven-1B5-v9-20230411-ctx4096.bin");
+    Application app("AutoText");
+    app.run();
+
+    return 0;
+
+    // std::string path = "../";
+    // Model model(
+    //     path + "rwkv.cpp/rwkv/20B_tokenizer.json",
+    //     path + "models/Q8_0-RWKV-4-Raven-1B5-v9-20230411-ctx4096.bin");
     
-    if (!model) {
-        return -1;
-    }
+    // if (!model) {
+    //     return -1;
+    // }
     
+    /*
     std::string text = read_file(path + "input1.txt");
 
     model.encodeText(text);
@@ -67,4 +74,5 @@ int main() {
     }
 
     return 0;
+    */
 }
