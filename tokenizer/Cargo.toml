@@ -1,0 +1,11 @@
+[package]
+name = "c_tokenizers"
+version = "0.1.0"
+edition = "2021"
+
+[lib]
+name = "c_tokenizer"
+crate-type = ["cdylib"]
+
+[dependencies]
+tokenizers = "0.13.3"
