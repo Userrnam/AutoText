@@ -133,6 +133,13 @@ void Application::run()
             loadingThread = nullptr;
         }
 
+        if (joinTextGenerationThread) {
+            textGenerationThread->join();
+            delete textGenerationThread;
+            textGenerationThread = nullptr;
+            joinTextGenerationThread = false;
+        }
+
         // Poll and handle events (inputs, window resize, etc.)
         // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
         // - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application, or clear/overwrite your copy of the mouse data.
@@ -173,11 +180,15 @@ std::vector<char> wrapText(const std::vector<char>& s, int width) {
 }
 
 int resizeCallback(ImGuiInputTextCallbackData* data) {
+    auto *app = static_cast<Application *>(data->UserData);
     if (data->EventFlag == ImGuiInputTextFlags_CallbackResize) {
-        auto *app = static_cast<Application *>(data->UserData);
+        app->textSize = data->BufTextLen;
         if (data->BufTextLen == app->text.size() - 1) {
             app->text.resize(app->text.size() * 1.5f);
         }
+    }
+    if (data->BufTextLen != app->textSize) {
+        data->BufDirty = true;
     }
     return 0;
 }
@@ -186,7 +197,8 @@ int resizeCallback(ImGuiInputTextCallbackData* data) {
 void Application::updateText() {
     ImGui::InputTextMultiline("##source", &text[0], text.size(), ImVec2(-FLT_MIN, -FLT_MIN),
                               ImGuiInputTextFlags_NoHorizontalScroll
-                              | ImGuiInputTextFlags_CallbackResize, resizeCallback, this);
+                              | ImGuiInputTextFlags_CallbackResize
+                              | ImGuiInputTextFlags_CallbackAlways, resizeCallback, this);
 }
 
 void Application::updateUI() {
@@ -219,9 +231,12 @@ void Application::updateUI() {
 
     // controls
     if (model) {
-        if (!textGenerationThread && ImGui::Button("Continue Text")) {
-            // stopGeneration = false;
-            // textGenerationThread = new std::thread(&Application::textGeneration, this);
+        if (ImGui::Button("Continue Text")) {
+            if (!textGenerationThread) {
+                stopGeneration = false;
+                joinTextGenerationThread = false;
+                textGenerationThread = new std::thread(&Application::textGeneration, this);
+            }
         }
         ImGui::SameLine();
         if (ImGui::Button("Pause Generation")) {
@@ -239,11 +254,28 @@ void Application::updateUI() {
     if (showingFileExplorer) {
         showFileExplorer(&showingFileExplorer);
     }
-
 }
 
 void Application::textGeneration() {
+    model->add(std::string(text.begin(), text.end()));
+    auto token = model->sampleDistribution();
+    auto s = model->decodeToken(token);
 
+    // FIXME: boundary check!
+    for (char c : s) {
+        text[textSize++] = c;
+    }
+
+    while (!stopGeneration) {
+        model->add(token);
+        token = model->sampleDistribution();
+        auto s = model->decodeToken(token);
+        for (char c : s) {
+            text[textSize++] = c;
+        }
+    }
+
+    joinTextGenerationThread = true;
 }
 
 std::vector<std::string> getFilesInDirectory(const std::string& directoryPath) {

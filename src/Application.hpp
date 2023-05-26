@@ -13,6 +13,8 @@ struct Application {
     void run();
 
     std::vector<char> text;
+    size_t textSize = 0;
+
     std::string appPath = PROJECT_PATH;
     std::string modelName;
 
