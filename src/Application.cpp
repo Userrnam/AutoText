@@ -11,6 +11,14 @@
 #endif
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
 
+#include <filesystem>
+
+#if defined(__APPLE__)
+namespace fs = std::__fs::filesystem;
+#else
+namespace fs = std::filesystem;
+#endif
+
 // [Win32] Our example includes a copy of glfw3.lib pre-compiled with VS2010 to maximize ease of testing and compatibility with old VS compilers.
 // To link with VS2010-era libraries, VS2015+ requires linking with legacy_stdio_definitions.lib, which we do using this pragma.
 // Your own project should not be affected, as you are likely to link with a newer binary of GLFW that is adequate for your version of Visual Studio.
@@ -68,7 +76,6 @@ Application::Application(const char *name) {
     ImGui::CreateContext();
     ImGuiIO& io = ImGui::GetIO();
     io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;     // Enable Keyboard Controls
-    io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
 
     // Setup Dear ImGui style
     ImGui::StyleColorsDark();
@@ -94,6 +101,12 @@ Application::Application(const char *name) {
     //io.Fonts->AddFontFromFileTTF("../../misc/fonts/Cousine-Regular.ttf", 15.0f);
     //ImFont* font = io.Fonts->AddFontFromFileTTF("c:\\Windows\\Fonts\\ArialUni.ttf", 18.0f, nullptr, io.Fonts->GetGlyphRangesJapanese());
     //IM_ASSERT(font != nullptr);
+
+    if (!io.Fonts->AddFontFromFileTTF((appPath + "/Droid Sans Mono Slashed for Powerline.ttf").c_str(), 20.0f)) {
+        std::cout << "Failed To load font\n";
+    }
+
+    text.resize(1024, 0);
 }
 
 Application::~Application() {
@@ -114,6 +127,12 @@ void Application::run()
     // Main loop
     while (!glfwWindowShouldClose(window))
     {
+        if (loadingThread && modelLoaded) {
+            loadingThread->join();
+            delete loadingThread;
+            loadingThread = nullptr;
+        }
+
         // Poll and handle events (inputs, window resize, etc.)
         // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
         // - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application, or clear/overwrite your copy of the mouse data.
@@ -126,7 +145,7 @@ void Application::run()
         ImGui_ImplGlfw_NewFrame();
         ImGui::NewFrame();
 
-        // displaying
+        updateUI();
 
         // Rendering
         ImGui::Render();
@@ -139,4 +158,129 @@ void Application::run()
 
         glfwSwapBuffers(window);
     }
+}
+
+std::vector<char> wrapText(const std::vector<char>& s, int width) {
+    auto result = s;
+    result.push_back(0);
+    result.push_back(0);
+    return result;
+    // int curLineWidth = 0;
+
+    // for (size_t i = 0; i < s.size(); ++i) {
+
+    // }
+}
+
+int resizeCallback(ImGuiInputTextCallbackData* data) {
+    if (data->EventFlag == ImGuiInputTextFlags_CallbackResize) {
+        auto *app = static_cast<Application *>(data->UserData);
+        if (data->BufTextLen == app->text.size() - 1) {
+            app->text.resize(app->text.size() * 1.5f);
+        }
+    }
+    return 0;
+}
+
+// TODO: autowrap, support for edits.
+void Application::updateText() {
+    ImGui::InputTextMultiline("##source", &text[0], text.size(), ImVec2(-FLT_MIN, -FLT_MIN),
+                              ImGuiInputTextFlags_NoHorizontalScroll
+                              | ImGuiInputTextFlags_CallbackResize, resizeCallback, this);
+}
+
+void Application::updateUI() {
+    static bool showingFileExplorer = false;
+
+    ImGui::SetNextWindowSize(ImGui::GetIO().DisplaySize);
+    ImGui::SetNextWindowPos(ImVec2(0, 0));
+
+    ImGui::Begin("Full-Screen Window", nullptr, ImGuiWindowFlags_NoDecoration | ImGuiWindowFlags_NoMove | ImGuiWindowFlags_NoResize);
+
+    ImGui::Columns(2, "myColumns"); // Split the window into 2 columns
+
+    // Column 1
+    updateText();
+
+    ImGui::NextColumn(); // Move to the next column
+
+    // Model loading
+    if (ImGui::Button("Model:")) {
+        showingFileExplorer = true;
+    }
+    ImGui::SameLine();
+    ImGui::Text("%s", modelName.c_str());
+
+    const char *status = "Model Not Loaded";
+    if (loadingThread)  status = "Loading Model";
+    else if (model)     status = "Model Loaded";
+
+    ImGui::Text("Status: %s", status);
+
+    // controls
+    if (model) {
+        if (!textGenerationThread && ImGui::Button("Continue Text")) {
+            // stopGeneration = false;
+            // textGenerationThread = new std::thread(&Application::textGeneration, this);
+        }
+        ImGui::SameLine();
+        if (ImGui::Button("Pause Generation")) {
+            stopGeneration = true;
+        }
+        ImGui::Text("Sampling Controls");
+        ImGui::Text("T");
+    }
+
+    ImGui::Columns(1); // Reset the column layout
+    ImGui::Separator();
+
+    ImGui::End();
+
+    if (showingFileExplorer) {
+        showFileExplorer(&showingFileExplorer);
+    }
+
+}
+
+void Application::textGeneration() {
+
+}
+
+std::vector<std::string> getFilesInDirectory(const std::string& directoryPath) {
+    std::vector<std::string> files;
+    try {
+        for (const auto& entry : fs::directory_iterator(directoryPath)) {
+            if (fs::is_regular_file(entry)) {
+                files.push_back(entry.path().filename().string());
+            }
+        }
+    }
+    catch (const fs::filesystem_error& e) {
+        std::cout << "Error accessing directory: " << e.what() << std::endl;
+    }
+    return files;
+}
+
+void Application::loadModel() {
+    modelLoaded = false;
+    model = new Model(appPath + "/rwkv.cpp/rwkv/20B_tokenizer.json", appPath + "/models/" + modelName);
+    if (!model) {
+        delete model;
+        model = nullptr;
+    }
+    modelLoaded = true;
+}
+
+void Application::showFileExplorer(bool *p_open) {
+    static auto files = getFilesInDirectory(appPath + "/models");
+
+    ImGui::Begin("Select Model", p_open);
+    for (auto& file : files) {
+        if (ImGui::Button(file.c_str())) {
+            modelName = std::move(file);
+            loadingThread = new std::thread(&Application::loadModel, this);
+            *p_open = false;
+        }
+    }
+    ImGui::End();
 }

@@ -6,6 +6,7 @@ add_subdirectory(rwkv.cpp)
 add_subdirectory(tokenizer)
 
 set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_BUILD_TYPE Debug)
 
 # imgui
 add_library(imgui
@@ -23,6 +24,7 @@ include_directories(${OPENGL_INCLUDE_DIRS})
 target_link_libraries(imgui PUBLIC ${OPENGL_LIBRARIES} glfw)
 
 # AutoText
+add_compile_definitions(PROJECT_PATH="${CMAKE_SOURCE_DIR}")
 add_executable(${PROJECT_NAME}
 	src/main.cpp
 	src/Model.cpp

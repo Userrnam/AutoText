@@ -30,12 +30,14 @@ Model::Model(const std::string& tokenizerPath, const std::string& modelPath) {
     tokenizer = new Tokenizer(tokenizerPath);
     if (!tokenizer->ok()) {
         std::cout << "Failed to load tokenizer\n";
+        return;
     }
     context = rwkv_init_from_file(modelPath.c_str(), 5);
     if (context) {
         std::cout << "Model loaded\n";
     } else {
         std::cout << "Failed to load model\n";
+        return;
     }
     state.resize(rwkv_get_state_buffer_element_count(context));
     logits.resize(rwkv_get_logits_buffer_element_count(context));
