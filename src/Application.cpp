@@ -106,7 +106,11 @@ Application::Application(const char *name) {
         std::cout << "Failed To load font\n";
     }
 
-    text.resize(1024, 0);
+    text.resize(4096, 0);
+    std::string s = "\nThe following is a coherent verbose detailed conversation between a girl named Alice and her friend Bob. Alice is very intelligent, creative and friendly. Alice is unlikely to disagree with Bob, and Alice doesn't like to ask Bob questions. Alice likes to tell Bob a lot about herself and her opinions. Alice usually gives Bob kind, helpful and informative advices.\n\nBob: Hello Alice, how are you doing?\n\nAlice: Hi! Thanks, I'm fine. What about you?\n\nBob: I am fine. It's nice to see you. Look, here is a store selling tea and juice.\n\nAlice: Sure. Let's go inside. I would like to have some Mocha latte, which is my favourite!\n\nBob: What is it?\n\nAlice: Mocha latte is usually made with espresso, milk, chocolate, and frothed milk. Its flavors are frequently sweet.\n\nBob: Sounds tasty. I'll try it next time. Would you like to chat with me for a while?\n\nAlice: Of course! I'm glad to answer your questions or give helpful advices. You know, I am confident with my expertise. So please go ahead!\n\n";
+    for (; textSize < s.size(); ++textSize) {
+        text[textSize] = s[textSize];
+    }
 }
 
 Application::~Application() {
@@ -167,24 +171,16 @@ void Application::run()
     }
 }
 
-std::vector<char> wrapText(const std::vector<char>& s, int width) {
-    auto result = s;
-    result.push_back(0);
-    result.push_back(0);
-    return result;
-    // int curLineWidth = 0;
-
-    // for (size_t i = 0; i < s.size(); ++i) {
-
-    // }
-}
-
 int resizeCallback(ImGuiInputTextCallbackData* data) {
     auto *app = static_cast<Application *>(data->UserData);
     if (data->EventFlag == ImGuiInputTextFlags_CallbackResize) {
         app->textSize = data->BufTextLen;
-        if (data->BufTextLen == app->text.size() - 1) {
-            app->text.resize(app->text.size() * 1.5f);
+        auto& text = app->text;
+        if (data->BufTextLen == text.size() - 1) {
+            text.resize(text.size() * 1.5f);
+            auto prevSize = text.size();
+            text.resize(text.size() * 1.5f);
+            memset(&text[prevSize], 0, (text.size() - prevSize) * sizeof(text[0]));
         }
     }
     if (data->BufTextLen != app->textSize) {
@@ -195,6 +191,32 @@ int resizeCallback(ImGuiInputTextCallbackData* data) {
 
 // TODO: autowrap, support for edits.
 void Application::updateText() {
+    int lineWidth = 0;
+    int lineWidthMax = 60;
+    int wrapLocation = 0;
+    for (int i = 0; i < text.size() && text[i]; ++i) {
+        if (i < text.size()-1 && std::isspace(text[i+1])) {
+            wrapLocation = i+1;
+        }
+        if (text[i] == '\n') {
+            lineWidth = 0;
+            wrapLocation = i;
+            continue;
+        }
+        if (lineWidth == lineWidthMax) {
+            // if the word takes up more than lineWidthMax, go till it's end
+            if (i - wrapLocation >= lineWidthMax) {
+                for (; i < text.size() && std::isspace(text[i]); ++i) {}
+                wrapLocation = i;
+            }
+            text[wrapLocation] = '\n';
+            i = wrapLocation;
+            lineWidth = 0;
+            continue;
+        }
+        lineWidth++;
+    }
+
     ImGui::InputTextMultiline("##source", &text[0], text.size(), ImVec2(-FLT_MIN, -FLT_MIN),
                               ImGuiInputTextFlags_NoHorizontalScroll
                               | ImGuiInputTextFlags_CallbackResize
@@ -242,6 +264,9 @@ void Application::updateUI() {
         if (ImGui::Button("Pause Generation")) {
             stopGeneration = true;
         }
+        if (progressCur != -1 && progressMax != -1) {
+            ImGui::Text("Encoding text: %3i / %i", progressCur, progressMax);
+        }
         ImGui::Text("Sampling Controls");
         ImGui::Text("T");
     }
@@ -257,11 +282,15 @@ void Application::updateUI() {
 }
 
 void Application::textGeneration() {
-    model->add(std::string(text.begin(), text.end()));
+    model->add(std::string(text.begin(), text.end()), &progressCur, &progressMax);
     auto token = model->sampleDistribution();
     auto s = model->decodeToken(token);
 
-    // FIXME: boundary check!
+    if (textSize + s.size() > text.size()) {
+        auto prevSize = text.size();
+        text.resize(text.size() * 1.5f);
+        memset(&text[prevSize], 0, (text.size() - prevSize) * sizeof(text[0]));
+    }
     for (char c : s) {
         text[textSize++] = c;
     }

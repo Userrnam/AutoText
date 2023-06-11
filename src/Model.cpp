@@ -53,12 +53,16 @@ void Model::add(uint32_t token) {
     rwkv_eval(context, token, &state[0], &state[0], &logits[0]);
 }
 
-void Model::add(const std::string& s) {
+void Model::add(const std::string& s, int* progressCur, int* progressMax) {
     if (s.empty())  return;
 
     auto ltokens = tokenizer->encode(s);
     for (auto token : ltokens) {
         tokens.push_back(token);
+    }
+
+    if (progressMax) {
+        *progressMax = ltokens.size();
     }
 
     auto start = time(NULL);
@@ -69,12 +73,17 @@ void Model::add(const std::string& s) {
         } else {
             rwkv_eval(context, ltokens[i], &state[0], &state[0], &logits[0]);
         }
+        if (progressCur) {
+            *progressCur = i + 1;
+        }
         if (time(NULL) - start == 1) {
             auto end = time(NULL);
             std::cout << i << " / " << ltokens.size() << std::endl;
             start = end;
         }
     }
+    if (progressMax)  *progressMax = -1;
+    if (progressCur)  *progressCur = -1;
     std::cout << "Text encoded\n";
 }
 
@@ -91,16 +100,16 @@ uint32_t Model::sampleDistribution() {
 
     // zero below avg
     if (samplingParams.zeroBelowAvg) {
-        auto average = avg(logits);
-        for (float& logit : logits) {
-            if (logit < average) { logit = 0; }
+        auto average = avg(probs);
+        for (float& prob : probs) {
+            if (prob < average) { prob = 0; }
         }
     }
 
     // sample
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::discrete_distribution<> d(logits.begin(), logits.end());
+    std::discrete_distribution<> d(probs.begin(), probs.end());
 
     return d(gen);
 }

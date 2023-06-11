@@ -28,7 +28,11 @@ struct Application {
     void textGeneration();
 
     struct GLFWwindow* window = nullptr;
+
     Model *model = nullptr;
+    int progressCur = -1;
+    int progressMax = -1;
+
     bool modelLoaded = false;
     std::thread *loadingThread = nullptr;
     std::thread *textGenerationThread = nullptr;

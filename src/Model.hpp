@@ -27,7 +27,7 @@ struct Model {
     operator bool() { return context != nullptr && tokenizer->ok(); }
 
     void add(uint32_t token);
-    void add(const std::string& s);
+    void add(const std::string& s, int* progressCur = nullptr, int* progressMax = nullptr);
     uint32_t sampleDistribution();
     std::string decodeToken(uint32_t token);
 };

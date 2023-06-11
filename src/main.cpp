@@ -36,43 +36,23 @@ int main() {
 
     return 0;
 
-    // std::string path = "../";
-    // Model model(
-    //     path + "rwkv.cpp/rwkv/20B_tokenizer.json",
-    //     path + "models/Q8_0-RWKV-4-Raven-1B5-v9-20230411-ctx4096.bin");
+    // std::string text = "Well, Prince, so Genoa and Lucca are now just family estates of the Buonapartes. But I warn you, if you don’t tell me that this means war, if you still try to defend the infamies and horrors ";
+
+    // Model model(std::string(PROJECT_PATH) + "/rwkv.cpp/rwkv/20B_tokenizer.json",
+    //             std::string(PROJECT_PATH) + "/models/Q8_0-RWKV-4-Raven-1B5-v9-20230411-ctx4096.bin");
     
     // if (!model) {
-    //     return -1;
+    //     return 1;
     // }
-    
-    /*
-    std::string text = read_file(path + "input1.txt");
 
-    model.encodeText(text);
+    // model.add(text);
 
-    std::cout << "T: " << text << std::endl;
-    auto state = model.state;
-    auto nt = model.nextToken;
-    while (true) {
-        for (int i = 0; i < 50; ++i) {
-            std::cout << model.next() << std::flush;
-        }
-        std::cout << std::endl;
+    // std::cout << "T: " << text << std::endl;
+    // for (int i = 0; i < 50; ++i) {
+    //     auto token = model.sampleDistribution();
+    //     std::cout << model.decodeToken(token) << std::flush;
+    //     model.add(token);
+    // }
 
-        std::string cmd;
-        std::cin >> cmd;
-
-        if (cmd == "c") {
-            state = model.state;
-            nt = model.nextToken;
-        } else if (cmd == "r") {
-            model.state = state;
-            model.nextToken = nt;
-        } else {
-            break;
-        }
-    }
-
-    return 0;
-    */
+    // return 0;
 }
