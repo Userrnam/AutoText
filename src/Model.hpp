@@ -23,6 +23,7 @@ struct Model {
 
     Model(const std::string& tokenizerPath, const std::string& modelPath);
     Model(Tokenizer *tokenizer, rwkv_context *context);
+    ~Model();
 
     operator bool() { return context != nullptr && tokenizer->ok(); }
 

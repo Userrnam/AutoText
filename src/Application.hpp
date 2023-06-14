@@ -4,8 +4,10 @@
 #include <string>
 #include <thread>
 
-#include "Model.hpp"
+#include "TextGenerator.hpp"
 
+
+// TODO: ensure text cannot be modified during encoding.
 struct Application {
     Application(const char *name);
     ~Application();
@@ -22,18 +24,12 @@ struct Application {
     void updateText();
     void showFileExplorer(bool *p_open);
     void loadModel();
-    
+
     bool stopGeneration = false;
     bool joinTextGenerationThread = false;
     void textGeneration();
 
     struct GLFWwindow* window = nullptr;
 
-    Model *model = nullptr;
-    int progressCur = -1;
-    int progressMax = -1;
-
-    bool modelLoaded = false;
-    std::thread *loadingThread = nullptr;
-    std::thread *textGenerationThread = nullptr;
+    TextGenerator textGenerator;
 };

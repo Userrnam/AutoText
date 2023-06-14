@@ -29,5 +29,6 @@ add_executable(${PROJECT_NAME}
 	src/main.cpp
 	src/Model.cpp
 	src/Application.cpp
+	src/TextGenerator.cpp
 )
 target_link_libraries(${PROJECT_NAME} PRIVATE rwkv tokenizer imgui)

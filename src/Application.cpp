@@ -131,19 +131,6 @@ void Application::run()
     // Main loop
     while (!glfwWindowShouldClose(window))
     {
-        if (loadingThread && modelLoaded) {
-            loadingThread->join();
-            delete loadingThread;
-            loadingThread = nullptr;
-        }
-
-        if (joinTextGenerationThread) {
-            textGenerationThread->join();
-            delete textGenerationThread;
-            textGenerationThread = nullptr;
-            joinTextGenerationThread = false;
-        }
-
         // Poll and handle events (inputs, window resize, etc.)
         // You can read the io.WantCaptureMouse, io.WantCaptureKeyboard flags to tell if dear imgui wants to use your inputs.
         // - When io.WantCaptureMouse is true, do not dispatch mouse input data to your main application, or clear/overwrite your copy of the mouse data.
@@ -174,9 +161,12 @@ void Application::run()
 int resizeCallback(ImGuiInputTextCallbackData* data) {
     auto *app = static_cast<Application *>(data->UserData);
     if (data->EventFlag == ImGuiInputTextFlags_CallbackResize) {
-        app->textSize = data->BufTextLen;
         auto& text = app->text;
-        if (data->BufTextLen == text.size() - 1) {
+        if (app->textSize > data->BufTextLen) {
+            memset(&text[data->BufTextLen], 0, app->textSize - data->BufTextLen);
+        }
+        app->textSize = data->BufTextLen;
+        if (data->BufTextLen == text.size() - 2) {
             text.resize(text.size() * 1.5f);
             auto prevSize = text.size();
             text.resize(text.size() * 1.5f);
@@ -191,6 +181,19 @@ int resizeCallback(ImGuiInputTextCallbackData* data) {
 
 // TODO: autowrap, support for edits.
 void Application::updateText() {
+    // FIXME: move it somewhere else
+    auto s = textGenerator.getGeneratedString();
+    for (char c : s) {
+        // FIXME implement custom buffer
+        if (textSize == text.size() - 2) {
+            text.resize(text.size() * 1.5f);
+            auto prevSize = text.size();
+            text.resize(text.size() * 1.5f);
+            memset(&text[prevSize], 0, (text.size() - prevSize) * sizeof(text[0]));
+        }
+        text[textSize++] = c;
+    }
+
     int lineWidth = 0;
     int lineWidthMax = 60;
     int wrapLocation = 0;
@@ -240,71 +243,42 @@ void Application::updateUI() {
 
     // Model loading
     if (ImGui::Button("Model:")) {
-        showingFileExplorer = true;
+        showingFileExplorer = !showingFileExplorer;
     }
-    ImGui::SameLine();
-    ImGui::Text("%s", modelName.c_str());
-
-    const char *status = "Model Not Loaded";
-    if (loadingThread)  status = "Loading Model";
-    else if (model)     status = "Model Loaded";
-
-    ImGui::Text("Status: %s", status);
-
-    // controls
-    if (model) {
-        if (ImGui::Button("Continue Text")) {
-            if (!textGenerationThread) {
-                stopGeneration = false;
-                joinTextGenerationThread = false;
-                textGenerationThread = new std::thread(&Application::textGeneration, this);
-            }
-        }
-        ImGui::SameLine();
-        if (ImGui::Button("Pause Generation")) {
-            stopGeneration = true;
-        }
-        if (progressCur != -1 && progressMax != -1) {
-            ImGui::Text("Encoding text: %3i / %i", progressCur, progressMax);
-        }
-        ImGui::Text("Sampling Controls");
-        ImGui::Text("T");
-    }
-
-    ImGui::Columns(1); // Reset the column layout
-    ImGui::Separator();
-
-    ImGui::End();
-
     if (showingFileExplorer) {
         showFileExplorer(&showingFileExplorer);
-    }
-}
+    } else {
+        ImGui::SameLine();
+        ImGui::Text("%s", modelName.c_str());
 
-void Application::textGeneration() {
-    model->add(std::string(text.begin(), text.end()), &progressCur, &progressMax);
-    auto token = model->sampleDistribution();
-    auto s = model->decodeToken(token);
+        const char *status = textGenerator.getStatusString();
+        ImGui::Text("Status: %s", status);
 
-    if (textSize + s.size() > text.size()) {
-        auto prevSize = text.size();
-        text.resize(text.size() * 1.5f);
-        memset(&text[prevSize], 0, (text.size() - prevSize) * sizeof(text[0]));
-    }
-    for (char c : s) {
-        text[textSize++] = c;
-    }
-
-    while (!stopGeneration) {
-        model->add(token);
-        token = model->sampleDistribution();
-        auto s = model->decodeToken(token);
-        for (char c : s) {
-            text[textSize++] = c;
+        // controls
+        if (textGenerator.modelLoaded()) {
+            if (ImGui::Button("Encode Text")) {
+                textGenerator.encodeText(std::string(text.begin(), text.begin() + textSize));
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Generate Text")) {
+                textGenerator.generateText();
+            }
+            ImGui::SameLine();
+            if (ImGui::Button("Interrupt")) {
+                textGenerator.interrupt();
+            }
+            auto progress = textGenerator.getTextEncodingProgress();
+            if (progress.cur != -1 && progress.max != -1) {
+                ImGui::Text("Encoding text: %3i / %i", progress.cur, progress.max);
+            }
+            ImGui::Text("Sampling Controls");
+            ImGui::Text("T");
         }
+
+        ImGui::Columns(1); // Reset the column layout
     }
 
-    joinTextGenerationThread = true;
+    ImGui::End();
 }
 
 std::vector<std::string> getFilesInDirectory(const std::string& directoryPath) {
@@ -322,26 +296,15 @@ std::vector<std::string> getFilesInDirectory(const std::string& directoryPath) {
     return files;
 }
 
-void Application::loadModel() {
-    modelLoaded = false;
-    model = new Model(appPath + "/rwkv.cpp/rwkv/20B_tokenizer.json", appPath + "/models/" + modelName);
-    if (!model) {
-        delete model;
-        model = nullptr;
-    }
-    modelLoaded = true;
-}
-
 void Application::showFileExplorer(bool *p_open) {
     static auto files = getFilesInDirectory(appPath + "/models");
 
-    ImGui::Begin("Select Model", p_open);
+    ImGui::Text("Select Model");
     for (auto& file : files) {
         if (ImGui::Button(file.c_str())) {
             modelName = std::move(file);
-            loadingThread = new std::thread(&Application::loadModel, this);
+            textGenerator.loadModel(appPath + "/rwkv.cpp/rwkv/20B_tokenizer.json", appPath + "/models/" + modelName);
             *p_open = false;
         }
     }
-    ImGui::End();
 }

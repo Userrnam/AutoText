@@ -43,23 +43,26 @@ Model::Model(const std::string& tokenizerPath, const std::string& modelPath) {
     logits.resize(rwkv_get_logits_buffer_element_count(context));
 }
 
+Model::~Model() {
+    delete tokenizer;
+    rwkv_free(context);
+}
+
 Model::Model(Tokenizer *tokenizer, rwkv_context *context) : tokenizer(tokenizer), context(context) {
     state.resize(rwkv_get_state_buffer_element_count(context));
     logits.resize(rwkv_get_logits_buffer_element_count(context));
 }
 
 void Model::add(uint32_t token) {
+    float *pState = tokens.size() == 0 ? NULL : &state[0];
+    rwkv_eval(context, token, pState, &state[0], &logits[0]);
     tokens.push_back(token);
-    rwkv_eval(context, token, &state[0], &state[0], &logits[0]);
 }
 
 void Model::add(const std::string& s, int* progressCur, int* progressMax) {
     if (s.empty())  return;
 
     auto ltokens = tokenizer->encode(s);
-    for (auto token : ltokens) {
-        tokens.push_back(token);
-    }
 
     if (progressMax) {
         *progressMax = ltokens.size();
@@ -68,11 +71,7 @@ void Model::add(const std::string& s, int* progressCur, int* progressMax) {
     auto start = time(NULL);
     std::cout << "Encoding text" << std::endl;
     for (size_t i = 0; i < ltokens.size(); ++i) {
-        if (i == 0) {
-            rwkv_eval(context, ltokens[i], NULL, &state[0], &logits[0]);
-        } else {
-            rwkv_eval(context, ltokens[i], &state[0], &state[0], &logits[0]);
-        }
+        add(ltokens[i]);
         if (progressCur) {
             *progressCur = i + 1;
         }
