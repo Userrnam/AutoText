@@ -5,8 +5,8 @@
 #include <imgui.h>
 
 struct Location {
-    size_t line;
-    size_t index;
+    size_t paragraphIndex;
+    size_t charIndex;
 };
 
 struct TextEditor {
@@ -19,9 +19,12 @@ struct TextEditor {
     bool erase(Location start, Location end);
     void append(const std::string& s);
 
+    // returns true if value changed
     bool updateUI(ImVec2 size);
 
 private:
-    bool _focused = false;
+    Location _cursor;
+    float _cursorAnim = 0;
+
     bool checkLocation(Location location);
 };
