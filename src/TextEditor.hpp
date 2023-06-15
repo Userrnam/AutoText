@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include <imgui.h>
+#include <string_view>
 
 struct Location {
     size_t paragraphIndex;
@@ -15,7 +16,7 @@ struct TextEditor {
 
     TextEditor();
 
-    bool write(Location location, const std::string& s);
+    bool write(Location location, const std::string_view& s);
     bool erase(Location start, Location end);
     void append(const std::string& s);
 
@@ -27,4 +28,5 @@ private:
     float _cursorAnim = 0;
 
     bool checkLocation(Location location);
+    int handleInput();
 };
