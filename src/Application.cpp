@@ -241,6 +241,8 @@ void Application::updateUI() {
 
     ImGui::NextColumn(); // Move to the next column
 
+    textEditor.updateUI(ImVec2(-FLT_MIN, 400));
+
     // Model loading
     if (ImGui::Button("Model:")) {
         showingFileExplorer = !showingFileExplorer;
