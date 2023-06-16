@@ -85,7 +85,7 @@ void TextEditor::append(const std::string& s) {
 char getCharInput() {
     char c = 0;
 
-    bool shift = ImGui::IsKeyDown(ImGuiKey_LeftShift) || ImGui::IsKeyDown(ImGuiKey_RightShift);
+    bool shift = ImGui::GetIO().KeyShift;
 
     // letters
     for (int i = 0; i < 26; ++i) {
@@ -140,12 +140,16 @@ char getCharInput() {
     return c;
 }
 
-// 0 - no changes, 1 - changed, 2 - cursor focus
+// TODO: wrapping aware movement
+// 0 - no changes, 1 - changed, 2 - cursor focus, 3 - selection update
 int TextEditor::handleInput() {
     char c = getCharInput();
 
-    // TODO: handle selection
     if (c) {
+        if (memcmp(&_cursor, &_selectionStart, sizeof(Location)) != 0) {
+            assert(erase(_cursor, _selectionStart));
+            _cursor = _selectionStart;
+        }
         assert(write(_cursor, std::string_view(&c, 1)));
         if (c == '\n') {
             _cursor.charIndex = 0;
@@ -157,6 +161,12 @@ int TextEditor::handleInput() {
     }
 
     if (ImGui::IsKeyPressed(ImGuiKey_Backspace)) {
+        if (memcmp(&_cursor, &_selectionStart, sizeof(Location)) != 0) {
+            assert(erase(_cursor, _selectionStart));
+            _cursor = _selectionStart;
+            return 1;
+        }
+
         if (_cursor.paragraphIndex == 0 && _cursor.charIndex == 0) {
             return 2;
         }
@@ -167,7 +177,11 @@ int TextEditor::handleInput() {
             newLoc.charIndex = text[newLoc.paragraphIndex].size();
         } else {
             newLoc.paragraphIndex = _cursor.paragraphIndex;
-            newLoc.charIndex = _cursor.charIndex - 1;
+            if (ImGui::GetIO().KeySuper) {
+                newLoc.charIndex = 0;
+            } else {
+                newLoc.charIndex = _cursor.charIndex - 1;
+            }
         }
 
         erase(newLoc, _cursor);
@@ -177,11 +191,41 @@ int TextEditor::handleInput() {
         return 1;
     }
 
+    if (ImGui::IsKeyPressed(ImGuiKey_Delete)) {
+        if (memcmp(&_cursor, &_selectionStart, sizeof(Location)) != 0) {
+            assert(erase(_cursor, _selectionStart));
+            _cursor = _selectionStart;
+            return 1;
+        }
+
+        if (_cursor.paragraphIndex == text.size() && _cursor.charIndex == text.back().size()) {
+            return 2;
+        }
+
+        Location loc;
+        if (_cursor.charIndex == text[_cursor.paragraphIndex].size()) {
+            loc.paragraphIndex = _cursor.paragraphIndex + 1;
+            loc.charIndex = 0;
+        } else {
+            loc.paragraphIndex = _cursor.paragraphIndex;
+            if (ImGui::GetIO().KeySuper) {
+                loc.charIndex = text[_cursor.paragraphIndex].size();
+            } else {
+                loc.charIndex = _cursor.charIndex + 1;
+            }
+        }
+
+        erase(loc, _cursor);
+
+        return 1;
+    }
+
     if (ImGui::IsKeyPressed(ImGuiKey_UpArrow)) {
         if (_cursor.paragraphIndex != 0) {
             _cursor.paragraphIndex--;
             _cursor.charIndex = 0;
         }
+        if (ImGui::GetIO().KeyShift)  return 3;
         return 2;
     }
     if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) {
@@ -189,18 +233,21 @@ int TextEditor::handleInput() {
             _cursor.paragraphIndex++;
             _cursor.charIndex = 0;
         }
+        if (ImGui::GetIO().KeyShift)  return 3;
         return 2;
     }
     if (ImGui::IsKeyPressed(ImGuiKey_LeftArrow)) {
         if (_cursor.charIndex != 0) {
             _cursor.charIndex--;
         }
+        if (ImGui::GetIO().KeyShift)  return 3;
         return 2;
     }
     if (ImGui::IsKeyPressed(ImGuiKey_RightArrow)) {
         if (_cursor.charIndex != text[_cursor.paragraphIndex].size()) {
             _cursor.charIndex++;
         }
+        if (ImGui::GetIO().KeyShift)  return 3;
         return 2;
     }
 
@@ -208,15 +255,24 @@ int TextEditor::handleInput() {
 }
 
 bool TextEditor::updateUI(ImVec2 size) {
-    int inputStatus = handleInput(); 
-
     ImGui::PushStyleColor(ImGuiCol_ChildBg, ImGui::GetColorU32(ImGuiCol_FrameBg));
     ImGui::BeginChild("Scrolling", size, true, ImGuiWindowFlags_NoNavInputs);
     bool focused = ImGui::IsWindowFocused();
 
+    int inputStatus = 0;
+    if (focused) {
+        inputStatus = handleInput(); 
+    }
+
+    if (inputStatus && inputStatus != 3) {
+        _selectionStart = _cursor;
+    }
+
     auto windowPos = ImGui::GetCursorPos();
     auto windowSize = ImGui::GetContentRegionAvail();
     int lineWidthMax = windowSize.x / ImGui::CalcTextSize("W").x;
+    if (ImGui::IsWindowHovered())
+        ImGui::SetMouseCursor(ImGuiMouseCursor_TextInput);
 
     std::vector<int> linesBeginnings;
     // Display and handle mouse click
@@ -248,10 +304,10 @@ bool TextEditor::updateUI(ImVec2 size) {
             linesBeginnings.push_back(text[paragraphIndex].size() + 1);
         }
         ImGui::Text("%s", paragraphCopy.c_str());
-        if (ImGui::IsMouseClicked(0)) {
+        auto lineHeight = ImGui::GetTextLineHeight();
+        if (ImGui::IsMouseDown(0)) {
             ImVec2 itemMin = ImGui::GetItemRectMin();
             ImVec2 itemMax = ImVec2(itemMin.x + windowSize.x, ImGui::GetItemRectMax().y);
-            auto lineHeight = ImGui::GetTextLineHeight();
             if (ImGui::IsMouseHoveringRect(itemMin, itemMax)) {
                 // find on which character user clicked.
                 auto mousePos = ImGui::GetMousePos();
@@ -281,6 +337,56 @@ bool TextEditor::updateUI(ImVec2 size) {
                 }
             }
         }
+
+        if (ImGui::IsMouseClicked(0)) {
+            _selectionStart = _cursor;
+        }
+
+        // render selection
+        if (memcmp(&_cursor, &_selectionStart, sizeof(Location)) != 0) {
+            auto start = _cursor;
+            auto end = _selectionStart;
+            if (end.paragraphIndex < start.paragraphIndex ||
+                (start.paragraphIndex == end.paragraphIndex && end.charIndex < start.charIndex)) {
+                std::swap(start, end);
+            }
+
+            ImDrawList* drawList = ImGui::GetWindowDrawList();
+            ImU32 bgColor = ImGui::GetColorU32(ImGuiCol_TextSelectedBg);
+            auto& paragraph = text[paragraphIndex];
+            float minSelectionWidth = 5.0f;
+
+            if (start.paragraphIndex <= paragraphIndex && paragraphIndex <= end.paragraphIndex) {
+                auto topLeft = ImGui::GetItemRectMin();
+                bool startFound = false;
+                bool endFound = false;
+                for (int i = 1; i < linesBeginnings.size() && !endFound; ++i) {
+                    float selectionBegin = 0;
+                    if (start.paragraphIndex == paragraphIndex && !startFound) {
+                        if (start.charIndex < linesBeginnings[i]) {
+                            selectionBegin = ImGui::CalcTextSize(&paragraph[linesBeginnings[i-1]], &paragraph[start.charIndex]).x;
+                            startFound = true;
+                        } else {
+                            continue;
+                        }
+                    }
+                    float selectionEnd;
+                    if (end.paragraphIndex == paragraphIndex && end.charIndex < linesBeginnings[i]) {
+                        selectionEnd = ImGui::CalcTextSize(&paragraph[linesBeginnings[i-1]], &paragraph[end.charIndex]).x;
+                        endFound = true;
+                    } else {
+                        selectionEnd = ImGui::CalcTextSize(&paragraph[linesBeginnings[i-1]], &paragraph[linesBeginnings[i]-1]).x;
+                    }
+                    auto p1 = ImVec2(topLeft.x + selectionBegin, topLeft.y + lineHeight * (i-1));
+                    auto p2 = ImVec2(topLeft.x + selectionEnd, topLeft.y + lineHeight * i);
+                    if (p2.x - p1.x < minSelectionWidth) {
+                        p2.x = p1.x + minSelectionWidth;
+                    }
+                    drawList->AddRectFilled(p1, p2, bgColor);
+                }
+            }
+        }
+
         if (!focused)  continue;
 
         // render cursor

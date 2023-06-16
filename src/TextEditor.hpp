@@ -25,6 +25,7 @@ struct TextEditor {
 
 private:
     Location _cursor;
+    Location _selectionStart;
     float _cursorAnim = 0;
 
     bool checkLocation(Location location);
