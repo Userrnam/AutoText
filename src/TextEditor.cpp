@@ -1,17 +1,15 @@
 #include "TextEditor.hpp"
 
 #include <iostream>
+#include <sstream>
 #include <math.h>
 
 TextEditor::TextEditor() {
-    // text.push_back("");
-    for (int i = 0; i < 50; ++i) {
-        text.push_back(std::to_string(i) + ": this is some text asfoia iweofja wefjaowei foawejf ioawjeoifj ao");
-    }
+    _text.push_back("");
 }
 
 bool TextEditor::checkLocation(Location location) {
-    return location.paragraphIndex < text.size() && location.charIndex <= text[location.paragraphIndex].size();
+    return location.paragraphIndex < _text.size() && location.charIndex <= _text[location.paragraphIndex].size();
 }
 
 bool TextEditor::write(Location location, const std::string_view& s) {
@@ -24,28 +22,28 @@ bool TextEditor::write(Location location, const std::string_view& s) {
 
     auto end = std::find(s.begin(), s.end(), '\n');
     if (end == s.end()) {
-        text[location.paragraphIndex].insert(text[location.paragraphIndex].begin() + location.charIndex, s.begin(), end);
+        _text[location.paragraphIndex].insert(_text[location.paragraphIndex].begin() + location.charIndex, s.begin(), end);
         return true;
     }
 
     // copy everything after the point of insertion
-    auto afterInsertion = std::string(text[location.paragraphIndex].begin() + location.charIndex, text[location.paragraphIndex].end());
+    auto afterInsertion = std::string(_text[location.paragraphIndex].begin() + location.charIndex, _text[location.paragraphIndex].end());
 
     // remove everything after the insertion
-    text[location.paragraphIndex].erase(text[location.paragraphIndex].begin() + location.charIndex, text[location.paragraphIndex].end());
+    _text[location.paragraphIndex].erase(_text[location.paragraphIndex].begin() + location.charIndex, _text[location.paragraphIndex].end());
 
     auto start = s.begin();
     while (true) {
         auto end = std::find(start, s.end(), '\n');
-        text[location.paragraphIndex].insert(text[location.paragraphIndex].begin() + location.charIndex, start, end);
+        _text[location.paragraphIndex].insert(_text[location.paragraphIndex].begin() + location.charIndex, start, end);
         if (end != s.end()) {
-            text.insert(text.begin() + location.paragraphIndex + 1, "");
+            _text.insert(_text.begin() + location.paragraphIndex + 1, "");
             location.paragraphIndex++;
             location.charIndex = 0;
             start = end + 1;
         } else {
             // add ending of the first line back
-            text[location.paragraphIndex] += afterInsertion;
+            _text[location.paragraphIndex] += afterInsertion;
             break;
         }
     };
@@ -64,22 +62,22 @@ bool TextEditor::erase(Location start, Location end) {
     }
 
     if (start.paragraphIndex == end.paragraphIndex) {
-        auto& paragraph = text[start.paragraphIndex];
+        auto& paragraph = _text[start.paragraphIndex];
         paragraph.erase(paragraph.begin() + start.charIndex, paragraph.begin() + end.charIndex);
     } else {
-        auto& sParagraph = text[start.paragraphIndex];
-        auto& eParagraph = text[end.paragraphIndex];
+        auto& sParagraph = _text[start.paragraphIndex];
+        auto& eParagraph = _text[end.paragraphIndex];
         size_t prevSParagraphSize = sParagraph.size();
         sParagraph.erase(sParagraph.begin() + start.charIndex, sParagraph.end());
         sParagraph.insert(sParagraph.begin() + start.charIndex, eParagraph.begin() + end.charIndex, eParagraph.end());
-        text.erase(text.begin() + start.paragraphIndex + 1, text.begin() + end.paragraphIndex + 1);
+        _text.erase(_text.begin() + start.paragraphIndex + 1, _text.begin() + end.paragraphIndex + 1);
     }
 
     return true;
 }
 
 void TextEditor::append(const std::string& s) {
-    assert(write({text.size()-1, text.back().size()}, s));
+    assert(write({_text.size()-1, _text.back().size()}, s));
 }
 
 char getCharInput() {
@@ -174,7 +172,7 @@ int TextEditor::handleInput() {
         Location newLoc;
         if (_cursor.charIndex == 0) {
             newLoc.paragraphIndex = _cursor.paragraphIndex - 1;
-            newLoc.charIndex = text[newLoc.paragraphIndex].size();
+            newLoc.charIndex = _text[newLoc.paragraphIndex].size();
         } else {
             newLoc.paragraphIndex = _cursor.paragraphIndex;
             if (ImGui::GetIO().KeySuper) {
@@ -198,18 +196,18 @@ int TextEditor::handleInput() {
             return 1;
         }
 
-        if (_cursor.paragraphIndex == text.size() && _cursor.charIndex == text.back().size()) {
+        if (_cursor.paragraphIndex == _text.size() && _cursor.charIndex == _text.back().size()) {
             return 2;
         }
 
         Location loc;
-        if (_cursor.charIndex == text[_cursor.paragraphIndex].size()) {
+        if (_cursor.charIndex == _text[_cursor.paragraphIndex].size()) {
             loc.paragraphIndex = _cursor.paragraphIndex + 1;
             loc.charIndex = 0;
         } else {
             loc.paragraphIndex = _cursor.paragraphIndex;
             if (ImGui::GetIO().KeySuper) {
-                loc.charIndex = text[_cursor.paragraphIndex].size();
+                loc.charIndex = _text[_cursor.paragraphIndex].size();
             } else {
                 loc.charIndex = _cursor.charIndex + 1;
             }
@@ -229,7 +227,7 @@ int TextEditor::handleInput() {
         return 2;
     }
     if (ImGui::IsKeyPressed(ImGuiKey_DownArrow)) {
-        if (_cursor.paragraphIndex != text.size() - 1) {
+        if (_cursor.paragraphIndex != _text.size() - 1) {
             _cursor.paragraphIndex++;
             _cursor.charIndex = 0;
         }
@@ -244,7 +242,7 @@ int TextEditor::handleInput() {
         return 2;
     }
     if (ImGui::IsKeyPressed(ImGuiKey_RightArrow)) {
-        if (_cursor.charIndex != text[_cursor.paragraphIndex].size()) {
+        if (_cursor.charIndex != _text[_cursor.paragraphIndex].size()) {
             _cursor.charIndex++;
         }
         if (ImGui::GetIO().KeyShift)  return 3;
@@ -260,7 +258,7 @@ bool TextEditor::updateUI(ImVec2 size) {
     bool focused = ImGui::IsWindowFocused();
 
     int inputStatus = 0;
-    if (focused) {
+    if (focused && editable) {
         inputStatus = handleInput(); 
     }
 
@@ -276,9 +274,9 @@ bool TextEditor::updateUI(ImVec2 size) {
 
     std::vector<int> linesBeginnings;
     // Display and handle mouse click
-    for (int paragraphIndex = 0; paragraphIndex < text.size(); ++paragraphIndex) {
+    for (int paragraphIndex = 0; paragraphIndex < _text.size(); ++paragraphIndex) {
         linesBeginnings = {0};
-        auto paragraphCopy = text[paragraphIndex];
+        auto paragraphCopy = _text[paragraphIndex];
         // calc wrap locations
         {
             int lineWidth = 0;
@@ -301,14 +299,15 @@ bool TextEditor::updateUI(ImVec2 size) {
                 }
                 lineWidth++;
             }
-            linesBeginnings.push_back(text[paragraphIndex].size() + 1);
+            linesBeginnings.push_back(_text[paragraphIndex].size() + 1);
         }
         ImGui::Text("%s", paragraphCopy.c_str());
         auto lineHeight = ImGui::GetTextLineHeight();
+        // update cursor position
         if (ImGui::IsMouseDown(0)) {
             ImVec2 itemMin = ImGui::GetItemRectMin();
             ImVec2 itemMax = ImVec2(itemMin.x + windowSize.x, ImGui::GetItemRectMax().y);
-            if (ImGui::IsMouseHoveringRect(itemMin, itemMax)) {
+            if (focused && ImGui::IsMouseHoveringRect(itemMin, itemMax)) {
                 // find on which character user clicked.
                 auto mousePos = ImGui::GetMousePos();
 
@@ -320,10 +319,10 @@ bool TextEditor::updateUI(ImVec2 size) {
                 assert(lineNumber < linesBeginnings.size());
 
                 bool found = false;
-                auto start = &text[paragraphIndex][linesBeginnings[lineNumber]];
+                auto start = &_text[paragraphIndex][linesBeginnings[lineNumber]];
                 int searchStartIndex = (mousePos.x - 0.01f) / ImGui::CalcTextSize(".").x;
                 for (int i = linesBeginnings[lineNumber] + 1; i < linesBeginnings[lineNumber+1]; ++i) {
-                    auto textSize = ImGui::CalcTextSize(start, &text[paragraphIndex][i]);
+                    auto textSize = ImGui::CalcTextSize(start, &_text[paragraphIndex][i]);
                     if (mousePos.x < textSize.x) {
                         found = true;
                         _cursor.paragraphIndex = paragraphIndex;
@@ -336,10 +335,10 @@ bool TextEditor::updateUI(ImVec2 size) {
                     _cursor.charIndex = linesBeginnings[lineNumber + 1] - 1;
                 }
             }
-        }
 
-        if (ImGui::IsMouseClicked(0)) {
-            _selectionStart = _cursor;
+            if (!_wasFocused || ImGui::IsMouseClicked(0)) {
+                _selectionStart = _cursor;
+            }
         }
 
         // render selection
@@ -353,7 +352,7 @@ bool TextEditor::updateUI(ImVec2 size) {
 
             ImDrawList* drawList = ImGui::GetWindowDrawList();
             ImU32 bgColor = ImGui::GetColorU32(ImGuiCol_TextSelectedBg);
-            auto& paragraph = text[paragraphIndex];
+            auto& paragraph = _text[paragraphIndex];
             float minSelectionWidth = 5.0f;
 
             if (start.paragraphIndex <= paragraphIndex && paragraphIndex <= end.paragraphIndex) {
@@ -404,8 +403,8 @@ bool TextEditor::updateUI(ImVec2 size) {
             auto lineHeight = ImGui::GetTextLineHeight();
 
             cursorPos.y += lineHeight * lineNumber;
-            cursorPos.x += ImGui::CalcTextSize(&text[paragraphIndex][linesBeginnings[lineNumber]],
-                                               &text[paragraphIndex][_cursor.charIndex]).x;
+            cursorPos.x += ImGui::CalcTextSize(&_text[paragraphIndex][linesBeginnings[lineNumber]],
+                                               &_text[paragraphIndex][_cursor.charIndex]).x;
 
             if (inputStatus) {
                 float scrollY = ImGui::GetScrollY();
@@ -430,10 +429,24 @@ bool TextEditor::updateUI(ImVec2 size) {
             }
         }
     }
+
+    _wasFocused = focused;
+
     ImGui::EndChild();
     ImGui::PopStyleColor();
 
     ImGui::Text("%s", focused ? "Focused" : "Not Focused");
 
     return inputStatus == 1;
+}
+
+std::string TextEditor::getString() {
+    std::stringstream ss;
+    for (int i = 0; i < _text.size(); ++i) {
+        if (i != 0) {
+            ss << '\n';
+        }
+        ss << _text[i];
+    }
+    return ss.str();
 }

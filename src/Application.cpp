@@ -106,11 +106,9 @@ Application::Application(const char *name) {
         std::cout << "Failed To load font\n";
     }
 
-    text.resize(4096, 0);
     std::string s = "\nThe following is a coherent verbose detailed conversation between a girl named Alice and her friend Bob. Alice is very intelligent, creative and friendly. Alice is unlikely to disagree with Bob, and Alice doesn't like to ask Bob questions. Alice likes to tell Bob a lot about herself and her opinions. Alice usually gives Bob kind, helpful and informative advices.\n\nBob: Hello Alice, how are you doing?\n\nAlice: Hi! Thanks, I'm fine. What about you?\n\nBob: I am fine. It's nice to see you. Look, here is a store selling tea and juice.\n\nAlice: Sure. Let's go inside. I would like to have some Mocha latte, which is my favourite!\n\nBob: What is it?\n\nAlice: Mocha latte is usually made with espresso, milk, chocolate, and frothed milk. Its flavors are frequently sweet.\n\nBob: Sounds tasty. I'll try it next time. Would you like to chat with me for a while?\n\nAlice: Of course! I'm glad to answer your questions or give helpful advices. You know, I am confident with my expertise. So please go ahead!\n\n";
-    for (; textSize < s.size(); ++textSize) {
-        text[textSize] = s[textSize];
-    }
+    textEditor.append(s);
+    assert(textEditor.getString() == s);
 }
 
 Application::~Application() {
@@ -158,74 +156,6 @@ void Application::run()
     }
 }
 
-int resizeCallback(ImGuiInputTextCallbackData* data) {
-    auto *app = static_cast<Application *>(data->UserData);
-    if (data->EventFlag == ImGuiInputTextFlags_CallbackResize) {
-        auto& text = app->text;
-        if (app->textSize > data->BufTextLen) {
-            memset(&text[data->BufTextLen], 0, app->textSize - data->BufTextLen);
-        }
-        app->textSize = data->BufTextLen;
-        if (data->BufTextLen == text.size() - 2) {
-            text.resize(text.size() * 1.5f);
-            auto prevSize = text.size();
-            text.resize(text.size() * 1.5f);
-            memset(&text[prevSize], 0, (text.size() - prevSize) * sizeof(text[0]));
-        }
-    }
-    if (data->BufTextLen != app->textSize) {
-        data->BufDirty = true;
-    }
-    return 0;
-}
-
-// TODO: autowrap, support for edits.
-void Application::updateText() {
-    // FIXME: move it somewhere else
-    auto s = textGenerator.getGeneratedString();
-    for (char c : s) {
-        // FIXME implement custom buffer
-        if (textSize == text.size() - 2) {
-            text.resize(text.size() * 1.5f);
-            auto prevSize = text.size();
-            text.resize(text.size() * 1.5f);
-            memset(&text[prevSize], 0, (text.size() - prevSize) * sizeof(text[0]));
-        }
-        text[textSize++] = c;
-    }
-
-    int lineWidth = 0;
-    int lineWidthMax = 60;
-    int wrapLocation = 0;
-    for (int i = 0; i < text.size() && text[i]; ++i) {
-        if (i < text.size()-1 && std::isspace(text[i+1])) {
-            wrapLocation = i+1;
-        }
-        if (text[i] == '\n') {
-            lineWidth = 0;
-            wrapLocation = i;
-            continue;
-        }
-        if (lineWidth == lineWidthMax) {
-            // if the word takes up more than lineWidthMax, go till it's end
-            if (i - wrapLocation >= lineWidthMax) {
-                for (; i < text.size() && std::isspace(text[i]); ++i) {}
-                wrapLocation = i;
-            }
-            text[wrapLocation] = '\n';
-            i = wrapLocation;
-            lineWidth = 0;
-            continue;
-        }
-        lineWidth++;
-    }
-
-    ImGui::InputTextMultiline("##source", &text[0], text.size(), ImVec2(-FLT_MIN, -FLT_MIN),
-                              ImGuiInputTextFlags_NoHorizontalScroll
-                              | ImGuiInputTextFlags_CallbackResize
-                              | ImGuiInputTextFlags_CallbackAlways, resizeCallback, this);
-}
-
 void Application::updateUI() {
     static bool showingFileExplorer = false;
 
@@ -237,11 +167,13 @@ void Application::updateUI() {
     ImGui::Columns(2, "myColumns"); // Split the window into 2 columns
 
     // Column 1
-    updateText();
+    // FIXME: move it somewhere else
+    auto s = textGenerator.getGeneratedString();
+    textEditor.append(s);
+    textEditor.editable = !textGenerator.isRunning();
+    textEditor.updateUI(ImVec2(0, 0));
 
     ImGui::NextColumn(); // Move to the next column
-
-    textEditor.updateUI(ImVec2(-FLT_MIN, 400));
 
     // Model loading
     if (ImGui::Button("Model:")) {
@@ -259,15 +191,18 @@ void Application::updateUI() {
         // controls
         if (textGenerator.modelLoaded()) {
             if (ImGui::Button("Encode Text")) {
-                textGenerator.encodeText(std::string(text.begin(), text.begin() + textSize));
+                textEditor.editable = false;
+                textGenerator.encodeText(textEditor.getString());
             }
             ImGui::SameLine();
             if (ImGui::Button("Generate Text")) {
+                textEditor.editable = false;
                 textGenerator.generateText();
             }
             ImGui::SameLine();
             if (ImGui::Button("Interrupt")) {
                 textGenerator.interrupt();
+                textEditor.editable = true;
             }
             auto progress = textGenerator.getTextEncodingProgress();
             if (progress.cur != -1 && progress.max != -1) {

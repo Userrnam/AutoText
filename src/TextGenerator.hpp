@@ -30,6 +30,7 @@ struct TextGenerator {
     void generateText(int count = -1, bool detached = true); // -1 means text will be generated unti interrupted
 
     void interrupt();
+    bool isRunning() { return running; }
 
     bool modelLoaded() { return model != nullptr; }
 

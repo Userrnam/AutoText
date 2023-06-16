@@ -15,18 +15,13 @@ struct Application {
     void run();
 
     void updateUI();
-    void updateText();
     void showFileExplorer(bool *p_open);
     void loadModel();
 
     struct GLFWwindow* window = nullptr;
 
     TextEditor textEditor;
-
     TextGenerator textGenerator;
-
-    std::vector<char> text;
-    size_t textSize = 0;
 
     std::string appPath = PROJECT_PATH;
     std::string modelName;
