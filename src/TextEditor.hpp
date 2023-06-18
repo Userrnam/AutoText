@@ -4,6 +4,7 @@
 #include <string>
 #include <imgui.h>
 #include <string_view>
+#include <tuple>
 
 struct Location {
     size_t paragraphIndex;
@@ -13,7 +14,7 @@ struct Location {
 struct TextEditor {
     TextEditor();
 
-    bool write(Location location, const std::string_view& s);
+    bool write(Location& location, const std::string_view& s);
     bool erase(Location start, Location end);
     void append(const std::string& s);
 

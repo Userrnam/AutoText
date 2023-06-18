@@ -21,7 +21,7 @@ struct Application {
     struct GLFWwindow* window = nullptr;
 
     TextEditor textEditor;
-    TextGenerator textGenerator;
+    TextGenerator textGenerator{10};
 
     std::string appPath = PROJECT_PATH;
     std::string modelName;

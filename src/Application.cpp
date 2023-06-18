@@ -12,6 +12,8 @@
 #include <GLFW/glfw3.h> // Will drag system OpenGL headers
 
 #include <filesystem>
+#include <sstream>
+#include <fstream>
 
 #if defined(__APPLE__)
 namespace fs = std::__fs::filesystem;
@@ -29,6 +31,18 @@ namespace fs = std::filesystem;
 static void glfw_error_callback(int error, const char* description)
 {
     fprintf(stderr, "GLFW Error %d: %s\n", error, description);
+}
+
+std::string readFileToString(const std::string& filename) {
+    std::ifstream file(filename);
+    if (!file.is_open()) {
+        std::cerr << "Error opening file: " << filename << std::endl;
+        return "";
+    }
+
+    std::stringstream buffer;
+    buffer << file.rdbuf();
+    return buffer.str();
 }
 
 Application::Application(const char *name) {
@@ -106,7 +120,7 @@ Application::Application(const char *name) {
         std::cout << "Failed To load font\n";
     }
 
-    std::string s = "\nThe following is a coherent verbose detailed conversation between a girl named Alice and her friend Bob. Alice is very intelligent, creative and friendly. Alice is unlikely to disagree with Bob, and Alice doesn't like to ask Bob questions. Alice likes to tell Bob a lot about herself and her opinions. Alice usually gives Bob kind, helpful and informative advices.\n\nBob: Hello Alice, how are you doing?\n\nAlice: Hi! Thanks, I'm fine. What about you?\n\nBob: I am fine. It's nice to see you. Look, here is a store selling tea and juice.\n\nAlice: Sure. Let's go inside. I would like to have some Mocha latte, which is my favourite!\n\nBob: What is it?\n\nAlice: Mocha latte is usually made with espresso, milk, chocolate, and frothed milk. Its flavors are frequently sweet.\n\nBob: Sounds tasty. I'll try it next time. Would you like to chat with me for a while?\n\nAlice: Of course! I'm glad to answer your questions or give helpful advices. You know, I am confident with my expertise. So please go ahead!\n\n";
+    std::string s = readFileToString(appPath + "/initial_prompt.txt");
     textEditor.append(s);
     assert(textEditor.getString() == s);
 }

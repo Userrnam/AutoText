@@ -2,7 +2,10 @@
 
 #include <thread>
 
-TextGenerator::TextGenerator() {}
+TextGenerator::TextGenerator(int saveRate) {
+    memory.rate = saveRate;
+}
+
 TextGenerator::~TextGenerator() {
     if (model) {
         running = false;
@@ -56,10 +59,24 @@ void TextGenerator::encodeText(const std::string& initialText, bool detached) {
     running = true;
 
     auto tokens = model->tokenizer->encode(initialText);
+
+    // find part, shared with model
+    int sharedCount = 0;
+    for (; sharedCount < model->tokens.size() && sharedCount < tokens.size() &&
+           tokens[sharedCount] == model->tokens[sharedCount]; ++sharedCount) {}
+    
+    int stateIndex = sharedCount / memory.rate - 1;
+    if (stateIndex >= 0) {
+        model->state = memory.states[stateIndex];
+        model->tokens.erase(model->tokens.begin() + (stateIndex + 1) * memory.rate, model->tokens.end());
+    } else {
+        model->tokens.clear();
+    }
+
     encodingProgress.max = tokens.size();
 
     auto newStatus = Status::TextEncoded;
-    for (size_t i = 0; i < tokens.size(); ++i) {
+    for (size_t i = (stateIndex + 1) * memory.rate; i < tokens.size(); ++i) {
         if (!running) {
             newStatus = Status::TextEncodingInterrupted;
             model->tokens.clear();
@@ -67,6 +84,10 @@ void TextGenerator::encodeText(const std::string& initialText, bool detached) {
         }
 
         model->add(tokens[i]);
+        if (model->tokens.size() % memory.rate == 0) {
+            memory.states.push_back(model->state);
+        }
+
         encodingProgress.cur = i + 1;
     }
 
@@ -105,7 +126,12 @@ void TextGenerator::generateText(int count, bool detached) {
             std::lock_guard<std::mutex> guard(mtx);
             unreportedTokens.push_back(token);
         }
+
         model->add(token);
+        if (model->tokens.size() % memory.rate == 0) {
+            memory.states.push_back(model->state);
+        }
+
         token = model->sampleDistribution();
         i++;
     }

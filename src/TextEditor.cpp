@@ -12,7 +12,15 @@ bool TextEditor::checkLocation(Location location) {
     return location.paragraphIndex < _text.size() && location.charIndex <= _text[location.paragraphIndex].size();
 }
 
-bool TextEditor::write(Location location, const std::string_view& s) {
+std::tuple<Location, Location> orderLocations(Location start, Location end) {
+    if (end.paragraphIndex < start.paragraphIndex ||
+       (start.paragraphIndex == end.paragraphIndex && end.charIndex < start.charIndex)) {
+        return std::make_tuple(end, start);
+    }
+    return std::make_tuple(start, end);
+}
+
+bool TextEditor::write(Location& location, const std::string_view& s) {
     if (!checkLocation(location)) {
         return false;
     }
@@ -23,6 +31,7 @@ bool TextEditor::write(Location location, const std::string_view& s) {
     auto end = std::find(s.begin(), s.end(), '\n');
     if (end == s.end()) {
         _text[location.paragraphIndex].insert(_text[location.paragraphIndex].begin() + location.charIndex, s.begin(), end);
+        location.charIndex += s.size();
         return true;
     }
 
@@ -44,6 +53,7 @@ bool TextEditor::write(Location location, const std::string_view& s) {
         } else {
             // add ending of the first line back
             _text[location.paragraphIndex] += afterInsertion;
+            location.charIndex = afterInsertion.size();
             break;
         }
     };
@@ -51,15 +61,12 @@ bool TextEditor::write(Location location, const std::string_view& s) {
     return true;
 }
 
-bool TextEditor::erase(Location start, Location end) {
-    if (!checkLocation(start) || !checkLocation(end)) {
+bool TextEditor::erase(Location _start, Location _end) {
+    if (!checkLocation(_start) || !checkLocation(_end)) {
         return false;
     }
 
-    if (end.paragraphIndex < start.paragraphIndex ||
-       (start.paragraphIndex == end.paragraphIndex && end.charIndex < start.charIndex)) {
-        std::swap(start, end);
-    }
+    auto [start, end] = orderLocations(_start, _end);
 
     if (start.paragraphIndex == end.paragraphIndex) {
         auto& paragraph = _text[start.paragraphIndex];
@@ -77,7 +84,8 @@ bool TextEditor::erase(Location start, Location end) {
 }
 
 void TextEditor::append(const std::string& s) {
-    assert(write({_text.size()-1, _text.back().size()}, s));
+    Location location = {_text.size()-1, _text.back().size()};
+    assert(write(location, s));
 }
 
 char getCharInput() {
@@ -141,27 +149,61 @@ char getCharInput() {
 // TODO: wrapping aware movement
 // 0 - no changes, 1 - changed, 2 - cursor focus, 3 - selection update
 int TextEditor::handleInput() {
-    char c = getCharInput();
-
-    if (c) {
+    auto removeSelection = [&]() {
         if (memcmp(&_cursor, &_selectionStart, sizeof(Location)) != 0) {
             assert(erase(_cursor, _selectionStart));
-            _cursor = _selectionStart;
+            if (_selectionStart.paragraphIndex < _cursor.paragraphIndex ||
+                _selectionStart.paragraphIndex == _cursor.paragraphIndex &&
+                _selectionStart.charIndex < _cursor.charIndex) {
+                _cursor = _selectionStart;
+            }
+            return true;
         }
-        assert(write(_cursor, std::string_view(&c, 1)));
-        if (c == '\n') {
-            _cursor.charIndex = 0;
-            _cursor.paragraphIndex++;
-        } else {
-            _cursor.charIndex++;
+        return false;
+    };
+
+    // shortcuts
+
+    // copy to cipboard
+    if (ImGui::IsKeyPressed(ImGuiKey_C) && ImGui::GetIO().KeySuper) {
+        if (memcmp(&_cursor, &_selectionStart, sizeof(Location)) != 0) {
+            auto [start, end] = orderLocations(_cursor, _selectionStart);
+            std::string result;
+            if (start.paragraphIndex == end.paragraphIndex) {
+                result = std::string(_text[start.paragraphIndex].begin() + start.charIndex, 
+                                     _text[end.paragraphIndex].begin() + end.charIndex + 1);
+            } else {
+                result = std::string(_text[start.paragraphIndex].begin() + start.charIndex, 
+                                     _text[start.paragraphIndex].end()) + '\n';
+                for (int i = start.paragraphIndex + 1; i < end.paragraphIndex; ++i) {
+                    result += _text[i] + '\n';
+                }
+                result += std::string(_text[end.paragraphIndex].begin(),
+                                      _text[end.paragraphIndex].begin() + end.charIndex + 1);
+            }
+            ImGui::SetClipboardText(result.c_str());
+            _selectionStart = _cursor;
         }
         return 1;
     }
 
+    // paste from cipboard
+    if (ImGui::IsKeyPressed(ImGuiKey_V) && ImGui::GetIO().KeySuper) {
+        removeSelection();
+        write(_cursor, std::string_view(ImGui::GetClipboardText()));
+        return 1;
+    }
+
+    char c = getCharInput();
+
+    if (c) {
+        removeSelection();
+        assert(write(_cursor, std::string_view(&c, 1)));
+        return 1;
+    }
+
     if (ImGui::IsKeyPressed(ImGuiKey_Backspace)) {
-        if (memcmp(&_cursor, &_selectionStart, sizeof(Location)) != 0) {
-            assert(erase(_cursor, _selectionStart));
-            _cursor = _selectionStart;
+        if (removeSelection()) {
             return 1;
         }
 
@@ -190,9 +232,7 @@ int TextEditor::handleInput() {
     }
 
     if (ImGui::IsKeyPressed(ImGuiKey_Delete)) {
-        if (memcmp(&_cursor, &_selectionStart, sizeof(Location)) != 0) {
-            assert(erase(_cursor, _selectionStart));
-            _cursor = _selectionStart;
+        if (removeSelection()) {
             return 1;
         }
 
@@ -343,12 +383,7 @@ bool TextEditor::updateUI(ImVec2 size) {
 
         // render selection
         if (memcmp(&_cursor, &_selectionStart, sizeof(Location)) != 0) {
-            auto start = _cursor;
-            auto end = _selectionStart;
-            if (end.paragraphIndex < start.paragraphIndex ||
-                (start.paragraphIndex == end.paragraphIndex && end.charIndex < start.charIndex)) {
-                std::swap(start, end);
-            }
+            auto [start, end] = orderLocations(_cursor, _selectionStart);
 
             ImDrawList* drawList = ImGui::GetWindowDrawList();
             ImU32 bgColor = ImGui::GetColorU32(ImGuiCol_TextSelectedBg);

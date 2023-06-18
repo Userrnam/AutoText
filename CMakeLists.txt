@@ -5,7 +5,7 @@ add_subdirectory(glfw)
 add_subdirectory(rwkv.cpp)
 add_subdirectory(tokenizer)
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_BUILD_TYPE Debug)
 
 # imgui

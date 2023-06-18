@@ -17,7 +17,7 @@ struct TextGenerator {
         int max = -1;
     };
 
-    TextGenerator();
+    TextGenerator(int saveRate = 100);
     ~TextGenerator();
 
     Status getStatus();
@@ -42,9 +42,10 @@ private:
 
     struct {
         std::vector<std::vector<float>> states;
-        int start = 0;   // token location of the first state in memory
         int rate  = 100; // saves state after each 100 tokens
-        int max   = 5;   // max number of states
+
+        int TODOstart = 0;   // token location of the first state in memory
+        int TODOmax   = 5;   // max number of states
     } memory;
     std::vector<uint32_t> unreportedTokens;
     std::mutex mtx;
