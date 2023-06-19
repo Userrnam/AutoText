@@ -86,31 +86,60 @@ void Model::add(const std::string& s, int* progressCur, int* progressMax) {
     std::cout << "Text encoded\n";
 }
 
-uint32_t Model::sampleDistribution() {
+void Model::getReducedDistribution(std::vector<uint32_t>& sampleIndices, std::vector<float>& sampleProbs) {
     auto probs = softmax(logits, samplingParams.temperature);
+    float probSum = 0;
+    int iters = 0;
+    while (probSum < samplingParams.topP && sampleProbs.size() < samplingParams.topK) {
+        if (iters == probs.size()) {
+            break;
+        }
 
-    // punish repeating
-    int count = std::min((int)tokens.size(), 30);
-    float punishment = 0.9;
-    for (int i = 0; i < count; ++i) {
-        logits[tokens[tokens.size() - count + i]] *= punishment;
-        punishment *= 0.9;
+        // find max
+        int maxI = 0;
+        for (int i = 1; i < probs.size(); ++i) {
+            if (probs[maxI] < probs[i]) {
+                maxI = i;
+            }
+        }
+
+        sampleIndices.push_back(maxI);
+        sampleProbs.push_back(probs[maxI]);
+        probSum += probs[maxI];
+
+        probs[maxI] = 0;
+        iters++;
     }
+}
+
+uint32_t Model::sampleDistribution() {
+    std::vector<uint32_t> sampleIndices;
+    std::vector<float> sampleProbs;
+    getReducedDistribution(sampleIndices, sampleProbs);
+
+    // TODO:
+    // punish repeating
+    // int count = std::min((int)tokens.size(), 30);
+    // float punishment = 0.9;
+    // for (int i = 0; i < count; ++i) {
+    //     logits[tokens[tokens.size() - count + i]] *= punishment;
+    //     punishment *= 0.9;
+    // }
 
     // zero below avg
-    if (samplingParams.zeroBelowAvg) {
-        auto average = avg(probs);
-        for (float& prob : probs) {
-            if (prob < average) { prob = 0; }
-        }
-    }
+    // if (samplingParams.zeroBelowAvg) {
+    //     auto average = avg(probs);
+    //     for (float& prob : probs) {
+    //         if (prob < average) { prob = 0; }
+    //     }
+    // }
 
     // sample
     std::random_device rd;
     std::mt19937 gen(rd());
-    std::discrete_distribution<> d(probs.begin(), probs.end());
+    std::discrete_distribution<> d(sampleProbs.begin(), sampleProbs.end());
 
-    return d(gen);
+    return sampleIndices[d(gen)];
 }
 
 std::string Model::decodeToken(uint32_t token) {

@@ -1,6 +1,8 @@
 #include "TextGenerator.hpp"
 
 #include <thread>
+#include <sstream>
+#include <iomanip>
 
 TextGenerator::TextGenerator(int saveRate) {
     memory.rate = saveRate;
@@ -79,7 +81,6 @@ void TextGenerator::encodeText(const std::string& initialText, bool detached) {
     for (size_t i = (stateIndex + 1) * memory.rate; i < tokens.size(); ++i) {
         if (!running) {
             newStatus = Status::TextEncodingInterrupted;
-            model->tokens.clear();
             break;
         }
 
@@ -153,6 +154,49 @@ std::string TextGenerator::getGeneratedString() {
     auto result = model->tokenizer->decode(unreportedTokens);
     unreportedTokens = {};
     return result;
+}
+
+std::string TextGenerator::getReducedDistributionDescription() {
+    if (model->tokens.empty()) {
+        return "";
+    }
+
+    int cur = model->tokens.size();
+    if (model->tokens.size() == memory.tokenCountForDescription &&
+        memcmp(&memory.samplingParamsForDescription, &model->samplingParams, sizeof(SamplingParameters)) == 0) {
+        return memory.distributionDescription;
+    }
+
+    std::stringstream ss;
+
+    std::vector<uint32_t> sampleIndices;
+    std::vector<float> sampleProbs;
+    // FIXME: Possible synchronization Issues
+    model->getReducedDistribution(sampleIndices, sampleProbs);
+    memory.samplingParamsForDescription = model->samplingParams;
+
+    ss << std::setw(20) << "Token " << std::setw(20) << "Probability\n";
+    for (int i = 0; i < sampleIndices.size(); ++i) {
+        auto _token = model->decodeToken(sampleIndices[i]);
+        std::string token = "\"";
+        for (char c : _token) {
+            if      (c == ' ')   token += " ";
+            else if (c == '\n')  token += "\\n";
+            else if (c == '\r')  token += "\\r";
+            else if (c == '\t')  token += "\\t";
+            else                 token += c;
+        }
+        token += "\"";
+
+        ss << std::setw(20) << token;
+        ss << std::fixed << std::setprecision(4) << std::setw(20) << sampleProbs[i];
+        ss << "\n";
+    }
+
+    memory.distributionDescription = ss.str();
+    memory.tokenCountForDescription = cur;
+
+    return memory.distributionDescription;
 }
 
 #define CRS(name) case Status::name: return #name

@@ -36,6 +36,12 @@ struct TextGenerator {
 
     std::string getGeneratedString();
 
+    SamplingParameters* getSamplingParameters() {
+        return model ? &model->samplingParams : nullptr;
+    }
+
+    std::string getReducedDistributionDescription();
+
 private:
     Model *model = nullptr;
     Status status = Status::None;
@@ -46,6 +52,10 @@ private:
 
         int TODOstart = 0;   // token location of the first state in memory
         int TODOmax   = 5;   // max number of states
+
+        std::string distributionDescription;
+        int tokenCountForDescription;
+        SamplingParameters samplingParamsForDescription;
     } memory;
     std::vector<uint32_t> unreportedTokens;
     std::mutex mtx;

@@ -194,6 +194,14 @@ int TextEditor::handleInput() {
         return 1;
     }
 
+    if (ImGui::IsKeyPressed(ImGuiKey_A) && ImGui::GetIO().KeySuper) {
+        _cursor.paragraphIndex = _text.size()-1;
+        _cursor.charIndex = _text[_cursor.paragraphIndex].size();
+        _selectionStart.paragraphIndex = 0;
+        _selectionStart.charIndex = 0;
+        return 3;
+    }
+
     char c = getCharInput();
 
     if (c) {
@@ -469,8 +477,6 @@ bool TextEditor::updateUI(ImVec2 size) {
 
     ImGui::EndChild();
     ImGui::PopStyleColor();
-
-    ImGui::Text("%s", focused ? "Focused" : "Not Focused");
 
     return inputStatus == 1;
 }

@@ -204,6 +204,8 @@ void Application::updateUI() {
 
         // controls
         if (textGenerator.modelLoaded()) {
+            static int count = -1;
+            ImGui::InputInt("Gen Count", &count, 1, 100);
             if (ImGui::Button("Encode Text")) {
                 textEditor.editable = false;
                 textGenerator.encodeText(textEditor.getString());
@@ -211,7 +213,7 @@ void Application::updateUI() {
             ImGui::SameLine();
             if (ImGui::Button("Generate Text")) {
                 textEditor.editable = false;
-                textGenerator.generateText();
+                textGenerator.generateText(count);
             }
             ImGui::SameLine();
             if (ImGui::Button("Interrupt")) {
@@ -222,8 +224,17 @@ void Application::updateUI() {
             if (progress.cur != -1 && progress.max != -1) {
                 ImGui::Text("Encoding text: %3i / %i", progress.cur, progress.max);
             }
-            ImGui::Text("Sampling Controls");
-            ImGui::Text("T");
+            auto params = textGenerator.getSamplingParameters();
+            if (params) {
+                ImGui::Text("Sampling Controls");
+                ImGui::SliderFloat("T", &params->temperature, 0.0f, 2.0f, "T = %.3f");
+                ImGui::SliderInt("top K", &params->topK, 1, 50, "top K = %d");
+                ImGui::SliderFloat("top P", &params->topP, 0.0f, 1.0f, "top P = %.3f");
+
+                ImGui::BeginChild("Scrollable", ImVec2(0, 0));
+                ImGui::Text("%s", textGenerator.getReducedDistributionDescription().c_str());
+                ImGui::EndChild();
+            }
         }
 
         ImGui::Columns(1); // Reset the column layout
