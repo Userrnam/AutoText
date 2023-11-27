@@ -34,13 +34,18 @@ void TextGenerator::loadModel(const std::string& tokenizerPath, const std::strin
     }
     running = true;
     status = Status::LoadingModel;
+    if (model) {
+        delete model;
+        model = nullptr;
+    }
     model = new Model(tokenizerPath, modelPath);
     if (!*model) {
         delete model;
         model = nullptr;
         status = Status::ModelLoadingFailed;
+    } else {
+        status = Status::ModelLoaded;
     }
-    status = Status::ModelLoaded;
     running = false;
 }
 

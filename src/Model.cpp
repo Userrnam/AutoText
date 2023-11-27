@@ -30,6 +30,7 @@ Model::Model(const std::string& tokenizerPath, const std::string& modelPath) {
     tokenizer = new Tokenizer(tokenizerPath);
     if (!tokenizer->ok()) {
         std::cout << "Failed to load tokenizer\n";
+        delete tokenizer;
         return;
     }
     context = rwkv_init_from_file(modelPath.c_str(), 5);
@@ -37,10 +38,11 @@ Model::Model(const std::string& tokenizerPath, const std::string& modelPath) {
         std::cout << "Model loaded\n";
     } else {
         std::cout << "Failed to load model\n";
+        delete tokenizer;
         return;
     }
-    state.resize(rwkv_get_state_buffer_element_count(context));
-    logits.resize(rwkv_get_logits_buffer_element_count(context));
+    state.resize(rwkv_get_state_len(context));
+    logits.resize(rwkv_get_logits_len(context));
 }
 
 Model::~Model() {
@@ -49,8 +51,8 @@ Model::~Model() {
 }
 
 Model::Model(Tokenizer *tokenizer, rwkv_context *context) : tokenizer(tokenizer), context(context) {
-    state.resize(rwkv_get_state_buffer_element_count(context));
-    logits.resize(rwkv_get_logits_buffer_element_count(context));
+    state.resize(rwkv_get_state_len(context));
+    logits.resize(rwkv_get_logits_len(context));
 }
 
 void Model::add(uint32_t token) {

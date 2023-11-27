@@ -136,8 +136,6 @@ Application::~Application() {
 
 void Application::run()
 {
-    bool show_demo_window = true;
-    bool show_another_window = false;
     ImVec4 clear_color = ImVec4(0.45f, 0.55f, 0.60f, 1.00f);
 
     // Main loop
@@ -259,13 +257,16 @@ std::vector<std::string> getFilesInDirectory(const std::string& directoryPath) {
 }
 
 void Application::showFileExplorer(bool *p_open) {
-    static auto files = getFilesInDirectory(appPath + "/models");
+    auto files = getFilesInDirectory(appPath + "/models");
 
     ImGui::Text("Select Model");
     for (auto& file : files) {
+        if (!file.size()) {
+            continue;
+        }
         if (ImGui::Button(file.c_str())) {
             modelName = std::move(file);
-            textGenerator.loadModel(appPath + "/rwkv.cpp/rwkv/20B_tokenizer.json", appPath + "/models/" + modelName);
+            textGenerator.loadModel(appPath + "/20B_tokenizer.json", appPath + "/models/" + modelName);
             *p_open = false;
         }
     }
